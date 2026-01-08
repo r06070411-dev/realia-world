@@ -1,0 +1,857 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>REALIA WORLD - Neon City (Bright + AI Avatar)</title>
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden; background:#070A14; }
+    canvas { display:block; }
+
+    /* ===== UI ===== */
+    #hud {
+      position: fixed; left: 12px; top: 12px; z-index: 10;
+      display: flex; gap: 10px; flex-wrap: wrap;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+      user-select: none;
+    }
+    .chip {
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(180,200,255,.22);
+      color: rgba(255,255,255,.92);
+      padding: 10px 12px;
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .btn {
+      cursor: pointer;
+      background: rgba(129,86,255,.28);
+      border: 1px solid rgba(129,86,255,.55);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      backdrop-filter: blur(10px);
+    }
+    .btn:active { transform: translateY(1px); }
+
+    #help {
+      position: fixed; left: 12px; bottom: 12px; z-index: 10;
+      width: min(560px, calc(100vw - 24px));
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.88);
+      padding: 12px 14px;
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* ===== Mobile controls ===== */
+    #mobile {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+      padding: 0 14px 18px 14px;
+      pointer-events: none;
+    }
+    #stickWrap, #jumpWrap { pointer-events: auto; }
+    #stickWrap{
+      display:flex; align-items:flex-end; justify-content:flex-start;
+    }
+    #jumpWrap{
+      display:flex; align-items:flex-end; justify-content:flex-end;
+    }
+    #stick {
+      width: 140px; height: 140px; border-radius: 999px;
+      background: rgba(255,255,255,.06);
+      border: 1px solid rgba(180,200,255,.18);
+      backdrop-filter: blur(10px);
+      position: relative;
+      touch-action: none;
+      overflow: hidden;
+    }
+    #knob {
+      width: 66px; height: 66px; border-radius: 999px;
+      background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.35), rgba(129,86,255,.35));
+      border: 1px solid rgba(180,200,255,.22);
+      position:absolute; left:50%; top:50%;
+      transform: translate(-50%,-50%);
+    }
+    #jumpBtn {
+      min-width: 150px;
+      height: 64px;
+      border-radius: 18px;
+      background: rgba(129,86,255,.30);
+      border: 1px solid rgba(129,86,255,.60);
+      color: #fff;
+      font-size: 16px;
+      display:flex; align-items:center; justify-content:center;
+      backdrop-filter: blur(10px);
+      touch-action: manipulation;
+    }
+
+    /* ===== Chat Panel (AI Avatar) ===== */
+    #chat {
+      position: fixed; right: 12px; top: 12px; z-index: 20;
+      width: min(360px, calc(100vw - 24px));
+      height: min(520px, calc(100vh - 24px));
+      display: none;
+      background: rgba(10,12,25,.72);
+      border: 1px solid rgba(180,200,255,.18);
+      border-radius: 16px;
+      backdrop-filter: blur(14px);
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+      color: rgba(255,255,255,.92);
+    }
+    #chatHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      padding: 12px 12px;
+      border-bottom: 1px solid rgba(255,255,255,.10);
+      font-weight: 700;
+      letter-spacing: .2px;
+    }
+    #chatHeader small{ font-weight: 500; opacity:.75; }
+    #chatClose{
+      cursor:pointer;
+      width: 34px; height: 34px; border-radius: 12px;
+      display:flex; align-items:center; justify-content:center;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.10);
+    }
+    #chatLog{
+      padding: 12px;
+      height: calc(100% - 54px - 64px);
+      overflow: auto;
+    }
+    .msg{
+      padding: 10px 12px;
+      border-radius: 14px;
+      margin: 8px 0;
+      border: 1px solid rgba(255,255,255,.10);
+      background: rgba(255,255,255,.06);
+      line-height: 1.45;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+    .me{ background: rgba(129,86,255,.18); border-color: rgba(129,86,255,.30); }
+    #chatInputWrap{
+      position:absolute; left:0; right:0; bottom:0;
+      display:flex; gap: 10px;
+      padding: 10px;
+      border-top: 1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.10);
+    }
+    #chatInput{
+      flex:1;
+      border-radius: 14px;
+      border: 1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      color: #fff;
+      padding: 12px;
+      outline: none;
+      font-size: 14px;
+    }
+    #sendBtn{
+      border-radius: 14px;
+      border: 1px solid rgba(129,86,255,.55);
+      background: rgba(129,86,255,.32);
+      color:#fff;
+      padding: 0 14px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    #sendBtn:active{ transform: translateY(1px); }
+
+    /* Small hint banner */
+    #toast {
+      position: fixed; left: 50%; top: 10px; transform: translateX(-50%);
+      z-index: 30;
+      background: rgba(0,0,0,.45);
+      border: 1px solid rgba(255,255,255,.12);
+      color: rgba(255,255,255,.9);
+      padding: 10px 12px;
+      border-radius: 14px;
+      backdrop-filter: blur(10px);
+      font-family: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Segoe UI", sans-serif;
+      font-size: 13px;
+      display:none;
+    }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="chip"><b>REALIA WORLD</b> Neon City</div>
+    <div class="chip">FPS: <span id="fps">--</span></div>
+    <div class="chip">POS: <span id="pos">--</span></div>
+    <div class="btn" id="resetBtn">リセット</div>
+    <div class="btn" id="toggleBrightBtn">明るさ: <span id="brightMode">ON</span></div>
+  </div>
+
+  <div id="help">
+    操作<br/>
+    PC: WASD移動 / マウスドラッグで視点 / クリックでポインタロック(任意) / Spaceジャンプ<br/>
+    スマホ: 左スティック移動 / 画面ドラッグで視点 / ジャンプボタン<br/>
+    ヒント: <b>アバターをタップ/クリック</b>すると会話パネルが開きます
+  </div>
+
+  <div id="toast"></div>
+
+  <div id="mobile">
+    <div id="stickWrap">
+      <div id="stick"><div id="knob"></div></div>
+    </div>
+    <div id="jumpWrap">
+      <div id="jumpBtn">ジャンプ</div>
+    </div>
+  </div>
+
+  <div id="chat">
+    <div id="chatHeader">
+      <div>AIアバター <small id="chatSub">（デモ）</small></div>
+      <div id="chatClose">×</div>
+    </div>
+    <div id="chatLog"></div>
+    <div id="chatInputWrap">
+      <input id="chatInput" placeholder="例：この街のコンセプトを教えて" />
+      <button id="sendBtn">送信</button>
+    </div>
+  </div>
+
+  <!-- three.js -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+  <script>
+    // =========================
+    // 基本セットアップ（明るさ・色味強化）
+    // =========================
+    const scene = new THREE.Scene();
+
+    // 背景（少し色のある夜空）
+    scene.background = new THREE.Color(0x070A14);
+
+    // 色付きフォグ（奥が青紫に沈む）
+    scene.fog = new THREE.Fog(new THREE.Color(0x0A1030), 18, 180);
+
+    const camera = new THREE.PerspectiveCamera(70, innerWidth/innerHeight, 0.1, 800);
+    camera.position.set(0, 1.8, 6.5);
+
+    const renderer = new THREE.WebGLRenderer({ antialias:true, powerPreference:"high-performance" });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+
+    // ここが「暗い」を解決するポイント
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.35; // ← 明るさ
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+
+    document.body.appendChild(renderer.domElement);
+
+    // ライト（暗さ改善＆色味追加）
+    const ambient = new THREE.AmbientLight(0xBBD5FF, 0.55);
+    scene.add(ambient);
+
+    const hemi = new THREE.HemisphereLight(0x9FD2FF, 0x0B0F1E, 0.95); // 空色/地面色
+    scene.add(hemi);
+
+    const dir = new THREE.DirectionalLight(0xFFFFFF, 0.55);
+    dir.position.set(12, 18, 8);
+    scene.add(dir);
+
+    // ネオンライトっぽい点光源（街の色味）
+    const neon1 = new THREE.PointLight(0x7B5CFF, 0.9, 55, 2.0);
+    neon1.position.set(2, 6, -10);
+    scene.add(neon1);
+
+    const neon2 = new THREE.PointLight(0x2DE2E6, 0.8, 55, 2.0);
+    neon2.position.set(-6, 5, -18);
+    scene.add(neon2);
+
+    // =========================
+    // 地面（少し反射っぽく見える色）
+    // =========================
+    const groundGeo = new THREE.PlaneGeometry(200, 200, 1, 1);
+    const groundMat = new THREE.MeshStandardMaterial({
+      color: 0x0E1E4F,
+      metalness: 0.25,
+      roughness: 0.65,
+      emissive: 0x040915,
+      emissiveIntensity: 0.35
+    });
+    const ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.rotation.x = -Math.PI/2;
+    ground.position.y = 0;
+    scene.add(ground);
+
+    // 中央道路ライン（薄い光）
+    const lineGeo = new THREE.PlaneGeometry(2.2, 200);
+    const lineMat = new THREE.MeshStandardMaterial({
+      color: 0x0A102A,
+      emissive: 0x2030FF,
+      emissiveIntensity: 0.18,
+      roughness: 0.9,
+      metalness: 0.0
+    });
+    const roadLine = new THREE.Mesh(lineGeo, lineMat);
+    roadLine.rotation.x = -Math.PI/2;
+    roadLine.position.set(0, 0.01, 0);
+    scene.add(roadLine);
+
+    // =========================
+    // 建物（窓の発光で「明るく」「街っぽく」）
+    // =========================
+    const city = new THREE.Group();
+    scene.add(city);
+
+    function makeBuilding(w, h, d, baseColor, emissiveColor, emissiveIntensity){
+      const geo = new THREE.BoxGeometry(w, h, d);
+      const mat = new THREE.MeshStandardMaterial({
+        color: baseColor,
+        roughness: 0.82,
+        metalness: 0.05,
+        emissive: emissiveColor,
+        emissiveIntensity
+      });
+      const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = false;
+      mesh.receiveShadow = true;
+      return mesh;
+    }
+
+    // ネオンサイン（薄い板＋強め発光）
+    function makeSign(w, h, color){
+      const geo = new THREE.PlaneGeometry(w, h);
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: color,
+        emissiveIntensity: 1.35,
+        roughness: 0.3,
+        metalness: 0.0,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide
+      });
+      return new THREE.Mesh(geo, mat);
+    }
+
+    // 通りを作る（シンプルな“奥へ伸びる街”）
+    const rng = (a,b)=> a + Math.random()*(b-a);
+
+    const neonPalette = [
+      0x7B5CFF, // purple
+      0x2DE2E6, // cyan
+      0xFF4FD8, // pink
+      0x56FF9A, // green
+      0xFFC44D  // amber
+    ];
+
+    for(let i=0;i<90;i++){
+      const side = (i%2===0) ? 1 : -1;
+      const z = -i*4.2 - 6;
+
+      const w = rng(3.5, 8.5);
+      const h = rng(6, 22);
+      const d = rng(3.5, 8.5);
+
+      const x = side * rng(6.5, 16.0);
+      const base = new THREE.Color().setHSL(0.62, 0.25, rng(0.12, 0.22)); // 青系暗め
+      const eColor = new THREE.Color(neonPalette[(Math.random()*neonPalette.length)|0]);
+      const eInt = rng(0.08, 0.28); // 窓っぽい淡い発光
+
+      const b = makeBuilding(w,h,d, base, eColor, eInt);
+      b.position.set(x, h/2, z);
+      city.add(b);
+
+      // 看板（たまに）
+      if(Math.random() < 0.55){
+        const sign = makeSign(rng(0.8, 1.6), rng(2.0, 4.8), neonPalette[(Math.random()*neonPalette.length)|0]);
+        sign.position.set(
+          x + (side* (w/2 + 0.02)),
+          rng(2.0, Math.min(h-1.5, 10.0)),
+          z + rng(-d/2 + 0.6, d/2 - 0.6)
+        );
+        sign.rotation.y = side>0 ? -Math.PI/2 : Math.PI/2;
+        city.add(sign);
+      }
+    }
+
+    // 街灯（色味を追加）
+    function addStreetLamp(x, z, color){
+      const poleGeo = new THREE.CylinderGeometry(0.06, 0.08, 3.2, 8);
+      const poleMat = new THREE.MeshStandardMaterial({ color: 0x1A2448, roughness: 0.8, metalness: 0.1 });
+      const pole = new THREE.Mesh(poleGeo, poleMat);
+      pole.position.set(x, 1.6, z);
+      city.add(pole);
+
+      const headGeo = new THREE.SphereGeometry(0.12, 12, 12);
+      const headMat = new THREE.MeshStandardMaterial({
+        color: 0x000000,
+        emissive: color,
+        emissiveIntensity: 1.2,
+        roughness: 0.3,
+        metalness: 0.0
+      });
+      const head = new THREE.Mesh(headGeo, headMat);
+      head.position.set(x, 3.1, z);
+      city.add(head);
+
+      const light = new THREE.PointLight(color, 0.9, 20, 2.2);
+      light.position.set(x, 3.1, z);
+      scene.add(light);
+    }
+
+    for(let i=0;i<24;i++){
+      const z = -i*8 - 6;
+      addStreetLamp(-3.5, z, 0x2DE2E6);
+      addStreetLamp( 3.5, z, 0x7B5CFF);
+    }
+
+    // =========================
+    // プレイヤー（簡易：移動＋ジャンプ）
+    // =========================
+    const player = {
+      pos: new THREE.Vector3(0, 1.8, 6.5),
+      vel: new THREE.Vector3(0,0,0),
+      yaw: 0,
+      pitch: 0,
+      onGround: true
+    };
+
+    const keys = { w:false,a:false,s:false,d:false, space:false };
+    addEventListener("keydown", (e)=>{
+      if(e.code==="KeyW") keys.w=true;
+      if(e.code==="KeyA") keys.a=true;
+      if(e.code==="KeyS") keys.s=true;
+      if(e.code==="KeyD") keys.d=true;
+      if(e.code==="Space") keys.space=true;
+    });
+    addEventListener("keyup", (e)=>{
+      if(e.code==="KeyW") keys.w=false;
+      if(e.code==="KeyA") keys.a=false;
+      if(e.code==="KeyS") keys.s=false;
+      if(e.code==="KeyD") keys.d=false;
+      if(e.code==="Space") keys.space=false;
+    });
+
+    // マウス/タッチで視点操作
+    let dragging = false;
+    let lastX=0, lastY=0;
+
+    function onPointerDown(e){
+      // UI上なら無視
+      if(e.target && (e.target.closest("#hud") || e.target.closest("#chat"))) return;
+
+      dragging = true;
+      lastX = e.clientX ?? (e.touches && e.touches[0].clientX) ?? 0;
+      lastY = e.clientY ?? (e.touches && e.touches[0].clientY) ?? 0;
+    }
+    function onPointerMove(e){
+      if(!dragging) return;
+      const cx = e.clientX ?? (e.touches && e.touches[0].clientX) ?? lastX;
+      const cy = e.clientY ?? (e.touches && e.touches[0].clientY) ?? lastY;
+      const dx = cx - lastX;
+      const dy = cy - lastY;
+      lastX = cx; lastY = cy;
+
+      player.yaw   -= dx * 0.0042;
+      player.pitch -= dy * 0.0035;
+      player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch));
+    }
+    function onPointerUp(){ dragging = false; }
+
+    addEventListener("mousedown", onPointerDown);
+    addEventListener("mousemove", onPointerMove);
+    addEventListener("mouseup", onPointerUp);
+
+    addEventListener("touchstart", onPointerDown, {passive:true});
+    addEventListener("touchmove", onPointerMove, {passive:true});
+    addEventListener("touchend", onPointerUp);
+
+    // モバイルスティック
+    const stick = document.getElementById("stick");
+    const knob = document.getElementById("knob");
+    let stickActive = false;
+    let stickVec = {x:0,y:0};
+
+    stick.addEventListener("pointerdown", (e)=>{
+      stickActive = true;
+      stick.setPointerCapture(e.pointerId);
+      moveStick(e);
+    });
+    stick.addEventListener("pointermove", (e)=>{ if(stickActive) moveStick(e); });
+    stick.addEventListener("pointerup", ()=>{
+      stickActive = false;
+      stickVec.x=0; stickVec.y=0;
+      knob.style.left="50%"; knob.style.top="50%";
+    });
+
+    function moveStick(e){
+      const r = stick.getBoundingClientRect();
+      const cx = r.left + r.width/2;
+      const cy = r.top + r.height/2;
+      const dx = e.clientX - cx;
+      const dy = e.clientY - cy;
+      const max = r.width*0.35;
+      const len = Math.min(Math.hypot(dx,dy), max);
+      const ang = Math.atan2(dy,dx);
+      const x = Math.cos(ang)*len;
+      const y = Math.sin(ang)*len;
+      knob.style.left = (50 + (x/(r.width/2))*50) + "%";
+      knob.style.top  = (50 + (y/(r.height/2))*50) + "%";
+      stickVec.x = x/max;
+      stickVec.y = y/max;
+    }
+
+    // ジャンプ
+    const jumpBtn = document.getElementById("jumpBtn");
+    jumpBtn.addEventListener("click", ()=> doJump());
+    function doJump(){
+      if(player.onGround){
+        player.vel.y = 6.2;
+        player.onGround = false;
+      }
+    }
+
+    // =========================
+    // AIアバター（クリック/タップで会話UI）
+    // =========================
+    const avatar = new THREE.Group();
+    avatar.position.set(0, 0, -8); // 通りの少し先
+    scene.add(avatar);
+
+    // 体（少しネオン発光）
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.35, 0.9, 6, 12),
+      new THREE.MeshStandardMaterial({
+        color: 0x101827,
+        roughness: 0.35,
+        metalness: 0.35,
+        emissive: 0x7B5CFF,
+        emissiveIntensity: 0.25
+      })
+    );
+    body.position.y = 1.05;
+    avatar.add(body);
+
+    // 顔（発光）
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.28, 16, 16),
+      new THREE.MeshStandardMaterial({
+        color: 0x0B1020,
+        roughness: 0.25,
+        metalness: 0.25,
+        emissive: 0x2DE2E6,
+        emissiveIntensity: 0.35
+      })
+    );
+    head.position.y = 1.75;
+    avatar.add(head);
+
+    // 目（点）
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0x000000, emissive: 0xFFFFFF, emissiveIntensity: 0.9
+    });
+    const eyeL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 10, 10), eyeMat);
+    const eyeR = eyeL.clone();
+    eyeL.position.set(-0.09, 1.78, 0.25);
+    eyeR.position.set( 0.09, 1.78, 0.25);
+    avatar.add(eyeL, eyeR);
+
+    // アバターをほんのり照らすライト
+    const avLight = new THREE.PointLight(0xFF4FD8, 1.0, 10, 2.0);
+    avLight.position.set(0, 2.2, 0.5);
+    avatar.add(avLight);
+
+    // ネームプレート（常にカメラ向き）
+    const nameCanvas = document.createElement("canvas");
+    nameCanvas.width = 512; nameCanvas.height = 256;
+    const nctx = nameCanvas.getContext("2d");
+    function drawName(text){
+      nctx.clearRect(0,0,nameCanvas.width,nameCanvas.height);
+      // 背景
+      nctx.fillStyle = "rgba(0,0,0,0.35)";
+      roundRect(nctx, 10, 70, 492, 120, 26);
+      nctx.fill();
+      nctx.strokeStyle = "rgba(180,200,255,0.25)";
+      nctx.lineWidth = 4;
+      roundRect(nctx, 10, 70, 492, 120, 26);
+      nctx.stroke();
+      // 文字
+      nctx.fillStyle = "rgba(255,255,255,0.95)";
+      nctx.font = "bold 46px -apple-system, BlinkMacSystemFont, 'Noto Sans JP', sans-serif";
+      nctx.fillText(text, 30, 145);
+      nctx.fillStyle = "rgba(180,200,255,0.85)";
+      nctx.font = "28px -apple-system, BlinkMacSystemFont, 'Noto Sans JP', sans-serif";
+      nctx.fillText("Tap / Click to talk", 30, 190);
+    }
+    function roundRect(ctx,x,y,w,h,r){
+      ctx.beginPath();
+      ctx.moveTo(x+r,y);
+      ctx.arcTo(x+w,y,x+w,y+h,r);
+      ctx.arcTo(x+w,y+h,x,y+h,r);
+      ctx.arcTo(x,y+h,x,y,r);
+      ctx.arcTo(x,y,x+w,y,r);
+      ctx.closePath();
+    }
+    drawName("REALIA AI");
+
+    const nameTex = new THREE.CanvasTexture(nameCanvas);
+    nameTex.colorSpace = THREE.SRGBColorSpace;
+    const nameMat = new THREE.MeshBasicMaterial({ map: nameTex, transparent:true });
+    const namePlate = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.1), nameMat);
+    namePlate.position.set(0, 2.7, 0);
+    avatar.add(namePlate);
+
+    // クリック判定用（見えない当たり）
+    const avatarHit = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.6, 0.6, 2.4, 10),
+      new THREE.MeshBasicMaterial({ transparent:true, opacity:0.0 })
+    );
+    avatarHit.position.y = 1.2;
+    avatar.add(avatarHit);
+
+    // =========================
+    // 会話UI（ローカルデモ + サーバー接続に対応）
+    // =========================
+    const chat = document.getElementById("chat");
+    const chatLog = document.getElementById("chatLog");
+    const chatInput = document.getElementById("chatInput");
+    const sendBtn = document.getElementById("sendBtn");
+    const chatClose = document.getElementById("chatClose");
+    const chatSub = document.getElementById("chatSub");
+    const toast = document.getElementById("toast");
+
+    // ここをあなたのサーバーに変えると「本物のAI」になります
+    // 例）Renderで動いてるAPIがあるなら:
+    // const CHAT_API = "https://realia-server.onrender.com/api/chat";
+    const CHAT_API = ""; // 空ならローカルデモで返答
+
+    function openChat(){
+      chat.style.display = "block";
+      chatInput.focus();
+      if(CHAT_API){
+        chatSub.textContent = "（オンライン）";
+      }else{
+        chatSub.textContent = "（ローカルデモ）";
+      }
+    }
+    function closeChat(){
+      chat.style.display = "none";
+    }
+    chatClose.addEventListener("click", closeChat);
+
+    function addMsg(text, who="ai"){
+      const div = document.createElement("div");
+      div.className = "msg" + (who==="me" ? " me" : "");
+      div.textContent = text;
+      chatLog.appendChild(div);
+      chatLog.scrollTop = chatLog.scrollHeight;
+    }
+
+    async function sendChat(){
+      const text = (chatInput.value || "").trim();
+      if(!text) return;
+      chatInput.value = "";
+      addMsg(text, "me");
+
+      // オンライン（あなたのAPI）
+      if(CHAT_API){
+        try{
+          const res = await fetch(CHAT_API, {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ message: text })
+          });
+          const data = await res.json();
+          addMsg(data.reply ?? "（返答形式が違うかも。サーバーの返却を確認してください）", "ai");
+        }catch(err){
+          addMsg("通信に失敗しました。APIのURLやCORS設定を確認してください。", "ai");
+        }
+        return;
+      }
+
+      // ローカルデモ（とりあえず動く返答）
+      const demo = [
+        "了解！この街は『青紫ネオン×上品な近未来』を狙ってます。次はビル窓のパターンを増やすと一気に映えます。",
+        "OK。今の明るさはExposureを上げてます。もっと明るくするなら、路面の反射感（roughness下げ）＋ネオン看板増やしましょう。",
+        "AIアバターは今はデモです。Renderのサーバーに /api/chat を作れば、ここから本番AIに繋げられます。"
+      ];
+      addMsg(demo[(Math.random()*demo.length)|0], "ai");
+    }
+
+    sendBtn.addEventListener("click", sendChat);
+    chatInput.addEventListener("keydown", (e)=>{ if(e.key==="Enter") sendChat(); });
+
+    function showToast(text, ms=1800){
+      toast.textContent = text;
+      toast.style.display = "block";
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=> toast.style.display="none", ms);
+    }
+
+    // =========================
+    // クリック/タップでアバターを選択
+    // =========================
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    function screenToNDC(clientX, clientY){
+      mouse.x = (clientX / innerWidth) * 2 - 1;
+      mouse.y = -(clientY / innerHeight) * 2 + 1;
+    }
+
+    function onSceneClick(e){
+      // チャットUIクリックは無視
+      if(e.target && e.target.closest("#chat")) return;
+
+      const cx = e.clientX ?? (e.changedTouches && e.changedTouches[0].clientX);
+      const cy = e.clientY ?? (e.changedTouches && e.changedTouches[0].clientY);
+      if(cx==null || cy==null) return;
+
+      screenToNDC(cx, cy);
+      raycaster.setFromCamera(mouse, camera);
+      const hits = raycaster.intersectObject(avatarHit, true);
+      if(hits && hits.length){
+        openChat();
+        showToast("AIアバターに接続しました");
+      }
+    }
+
+    addEventListener("click", onSceneClick);
+    addEventListener("touchend", onSceneClick, {passive:true});
+
+    // =========================
+    // 明るさトグル（ON/OFF）
+    // =========================
+    const toggleBrightBtn = document.getElementById("toggleBrightBtn");
+    const brightModeEl = document.getElementById("brightMode");
+    let brightOn = true;
+
+    toggleBrightBtn.addEventListener("click", ()=>{
+      brightOn = !brightOn;
+      if(brightOn){
+        renderer.toneMappingExposure = 1.35;
+        ambient.intensity = 0.55;
+        hemi.intensity = 0.95;
+        neon1.intensity = 0.9;
+        neon2.intensity = 0.8;
+        brightModeEl.textContent = "ON";
+        showToast("明るさを上げました");
+      }else{
+        renderer.toneMappingExposure = 1.05;
+        ambient.intensity = 0.38;
+        hemi.intensity = 0.75;
+        neon1.intensity = 0.7;
+        neon2.intensity = 0.6;
+        brightModeEl.textContent = "OFF";
+        showToast("明るさを下げました");
+      }
+    });
+
+    // リセット
+    document.getElementById("resetBtn").addEventListener("click", ()=>{
+      player.pos.set(0,1.8,6.5);
+      player.vel.set(0,0,0);
+      player.yaw = 0;
+      player.pitch = 0;
+      showToast("位置をリセットしました");
+    });
+
+    // =========================
+    // ループ（移動 + アニメ）
+    // =========================
+    const fpsEl = document.getElementById("fps");
+    const posEl = document.getElementById("pos");
+
+    let lastT = performance.now();
+    let acc=0, frames=0;
+
+    function animate(t){
+      requestAnimationFrame(animate);
+      const dt = Math.min(0.033, (t-lastT)/1000);
+      lastT = t;
+
+      // FPS表示
+      acc += dt; frames++;
+      if(acc >= 0.5){
+        fpsEl.textContent = Math.round(frames/acc);
+        acc = 0; frames = 0;
+      }
+
+      // 入力（PC + モバイルスティック）
+      const forward = (keys.w ? 1:0) - (keys.s ? 1:0);
+      const strafe  = (keys.d ? 1:0) - (keys.a ? 1:0);
+
+      // stickVec は上が -1 なので反転
+      const mForward = -stickVec.y;
+      const mStrafe  = stickVec.x;
+
+      const f = forward + mForward;
+      const s = strafe + mStrafe;
+
+      // 速度（少し滑らか）
+      const speed = 6.0;
+      const ax = (Math.sin(player.yaw) * f + Math.cos(player.yaw) * s) * speed;
+      const az = (Math.cos(player.yaw) * f - Math.sin(player.yaw) * s) * speed;
+
+      // 慣性（ヌルっと）
+      player.vel.x = THREE.MathUtils.lerp(player.vel.x, ax, 0.12);
+      player.vel.z = THREE.MathUtils.lerp(player.vel.z, az, 0.12);
+
+      // ジャンプ（PC space）
+      if(keys.space) doJump();
+
+      // 重力
+      player.vel.y += -16.5 * dt;
+
+      // 更新
+      player.pos.x += player.vel.x * dt;
+      player.pos.y += player.vel.y * dt;
+      player.pos.z += player.vel.z * dt;
+
+      // 地面
+      if(player.pos.y < 1.8){
+        player.pos.y = 1.8;
+        player.vel.y = 0;
+        player.onGround = true;
+      }
+
+      // カメラ
+      const lookDir = new THREE.Vector3(
+        Math.sin(player.yaw) * Math.cos(player.pitch),
+        Math.sin(player.pitch),
+        Math.cos(player.yaw) * Math.cos(player.pitch)
+      );
+
+      camera.position.copy(player.pos);
+      camera.lookAt(player.pos.clone().add(lookDir));
+
+      // アバター：ふわふわ＆ネームプレートはカメラ向き
+      const bob = Math.sin(t*0.002) * 0.08;
+      avatar.position.y = bob;
+      namePlate.quaternion.copy(camera.quaternion);
+
+      // 位置表示
+      posEl.textContent = `${player.pos.x.toFixed(1)}, ${player.pos.y.toFixed(1)}, ${player.pos.z.toFixed(1)}`;
+
+      renderer.render(scene, camera);
+    }
+    requestAnimationFrame(animate);
+
+    addEventListener("resize", ()=>{
+      camera.aspect = innerWidth/innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
