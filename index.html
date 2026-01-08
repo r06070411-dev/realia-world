@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <title>REALIA WORLD (Demo)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <style>
+    html, body { margin:0; padding:0; overflow:hidden; background:#000; }
+
+    #ui {
+      position: fixed;
+      left: 12px;
+      top: 12px;
+      z-index: 10;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    .chip {
+      background: rgba(255,255,255,.10);
+      border: 1px solid rgba(255,255,255,.18);
+      color: #fff;
+      padding: 8px 12px;
+      border-radius: 12px;
+      font-size: 13px;
+      backdrop-filter: blur(10px);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .chip b { font-weight: 700; }
+
+    #hint {
+      position: fixed;
+      left: 12px;
+      bottom: 12px;
+      z-index: 10;
+      color: rgba(255,255,255,.85);
+      font-size: 13px;
+      background: rgba(0,0,0,.25);
+      padding: 10px 14px;
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 12px;
+      max-width: min(540px, calc(100vw - 24px));
+      backdrop-filter: blur(10px);
+      line-height: 1.5;
+    }
+
+    /* モバイル操作UI */
+    #mobileControls {
+      position: fixed;
+      left: 16px;
+      bottom: 90px;
+      z-index: 10;
+      display: none;
+      gap: 12px;
+      align-items: center;
+    }
+    #stick {
+      width: 120px;
+      height: 120px;
+      border-radius: 50%;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.18);
+      position: relative;
+      touch-action: none;
+    }
+    #stickDot {
+      width: 50px;
+      height: 50px;
+      border-radius: 50%;
+      background: rgba(129,86,255,.9);
+      position: absolute;
+      left: 35px;
+      top: 35px;
+    }
+    #jumpBtn {
+      padding: 14px 18px;
+      border-radius: 16px;
+      background: rgba(255,255,255,.08);
+      border: 1px solid rgba(255,255,255,.18);
+      color: #fff;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+
+<div id="ui">
+  <div class="chip"><b>REALIA WORLD</b> Demo</div>
+  <div class="chip">FPS: <span id="fps">--</span></div>
+  <div class="chip">POS: <span id="pos">--</span></div>
+  <div class="chip">操作: PC/スマホ自動</div>
+</div>
+
+<div id="mobileControls">
+  <div id="stick"><div id="stickDot"></div></div>
+  <button id="jumpBtn">ジャンプ</button>
+</div>
+
+<div id="hint">
+  <b>操作</b><br/>
+  PC: <b>WASD</b>移動 / マウスドラッグで視点 / 建物クリックで情報<br/>
+  スマホ: 画面ドラッグで視点 / 左スティックで移動 / タップで建物選択
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+<script>
+  // ===== 基本セットアップ =====
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0x000000, 20, 150);
+
+  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 500);
+  camera.position.set(0, 2, 6);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(devicePixelRatio);
+  document.body.appendChild(renderer.domElement);
+
+  // ===== ライト =====
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x222233, 1.0));
+  const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+  dir.position.set(10, 20, 10);
+  scene.add(dir);
+
+  // ===== 地面 =====
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(300, 300),
+    new THREE.MeshStandardMaterial({ color: 0x0f1320 })
+  );
+  ground.rotation.x = -Math.PI / 2;
+  scene.add(ground);
+
+  // ===== 建物生成 =====
+  const buildings = [];
+  function addBuilding(x, z, h, name) {
+    const mesh = new THREE.Mesh(
+      new THREE.BoxGeometry(2, h, 2),
+      new THREE.MeshStandardMaterial({ color: 0x8156ff })
+    );
+    mesh.position.set(x, h / 2, z);
+    mesh.userData = { name };
+    scene.add(mesh);
+    buildings.push(mesh);
+  }
+
+  addBuilding(0, -5, 4, "塗装業者A");
+  addBuilding(5, -10, 6, "リフォーム会社B");
+  addBuilding(-5, -12, 5, "建設会社C");
+  addBuilding(10, -6, 7, "外壁専門店D");
+  addBuilding(-10, -8, 5, "工務店E");
+
+  // ===== 移動制御 =====
+  let velocityY = 0;
+  let isGrounded = true;
+  const move = { forward: 0, right: 0 };
+  let yaw = 0, pitch = 0;
+  let isDragging = false;
+  let prevX = 0, prevY = 0;
+
+  // ===== PC操作 =====
+  window.addEventListener("keydown", e => {
+    if (e.key === "w") move.forward = 1;
+    if (e.key === "s") move.forward = -1;
+    if (e.key === "a") move.right = -1;
+    if (e.key === "d") move.right = 1;
+    if (e.key === " ") jump();
+  });
+  window.addEventListener("keyup", e => {
+    if (e.key === "w" || e.key === "s") move.forward = 0;
+    if (e.key === "a" || e.key === "d") move.right = 0;
+  });
+
+  // ===== 視点操作 =====
+  renderer.domElement.addEventListener("mousedown", e => {
+    isDragging = true;
+    prevX = e.clientX;
+    prevY = e.clientY;
+  });
+  window.addEventListener("mouseup", () => isDragging = false);
+  window.addEventListener("mousemove", e => {
+    if (!isDragging) return;
+    yaw -= (e.clientX - prevX) * 0.002;
+    pitch -= (e.clientY - prevY) * 0.002;
+    pitch = Math.max(-1.2, Math.min(1.2, pitch));
+    prevX = e.clientX;
+    prevY = e.clientY;
+  });
+
+  // ===== スマホ操作UI =====
+  const mobile = /iPhone|Android/i.test(navigator.userAgent);
+  const stick = document.getElementById("stick");
+  const stickDot = document.getElementById("stickDot");
+  const jumpBtn = document.getElementById("jumpBtn");
+  if (mobile) document.getElementById("mobileControls").style.display = "flex";
+
+  let stickActive = false;
+  let stickX = 0, stickY = 0;
+
+  stick?.addEventListener("touchstart", e => {
+    stickActive = true;
+  });
+  stick?.addEventListener("touchmove", e => {
+    const rect = stick.getBoundingClientRect();
+    const t = e.touches[0];
+    const dx = t.clientX - (rect.left + rect.width / 2);
+    const dy = t.clientY - (rect.top + rect.height / 2);
+    const max = rect.width / 2 - 10;
+    const len = Math.min(Math.hypot(dx, dy), max);
+    const angle = Math.atan2(dy, dx);
+    stickX = Math.cos(angle) * (len / max);
+    stickY = Math.sin(angle) * (len / max);
+    stickDot.style.left = 35 + stickX * 35 + "px";
+    stickDot.style.top = 35 + stickY * 35 + "px";
+  });
+  stick?.addEventListener("touchend", () => {
+    stickActive = false;
+    stickX = stickY = 0;
+    stickDot.style.left = "35px";
+    stickDot.style.top = "35px";
+  });
+  jumpBtn?.addEventListener("click", jump);
+
+  function jump() {
+    if (!isGrounded) return;
+    velocityY = 0.12;
+    isGrounded = false;
+  }
+
+  // ===== レイキャスト（建物タップ） =====
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  renderer.domElement.addEventListener("click", e => {
+    mouse.x = (e.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+    raycaster.setFromCamera(mouse, camera);
+    const hits = raycaster.intersectObjects(buildings);
+    if (hits.length) {
+      alert("選択: " + hits[0].object.userData.name);
+    }
+  });
+
+  // ===== リサイズ =====
+  window.addEventListener("resize", () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  // ===== ループ =====
+  let last = performance.now();
+  function animate(now) {
+    requestAnimationFrame(animate);
+    const dt = (now - last) / 1000;
+    last = now;
+
+    // 重力
+    velocityY -= 0.3 * dt;
+    camera.position.y += velocityY;
+    if (camera.position.y <= 2) {
+      camera.position.y = 2;
+      velocityY = 0;
+      isGrounded = true;
+    }
+
+    // 移動
+    const speed = 6 * dt;
+    const forward = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
+    const right = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+    let f = move.forward, r = move.right;
+    if (mobile && stickActive) {
+      f = -stickY;
+      r = stickX;
+    }
+    camera.position.add(forward.multiplyScalar(f * speed));
+    camera.position.add(right.multiplyScalar(r * speed));
+
+    // 視点
+    camera.rotation.order = "YXZ";
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+
+    // UI更新
+    document.getElementById("fps").textContent = Math.round(1 / dt);
+    document.getElementById("pos").textContent =
+      camera.position.x.toFixed(1) + ", " +
+      camera.position.y.toFixed(1) + ", " +
+      camera.position.z.toFixed(1);
+
+    renderer.render(scene, camera);
+  }
+  animate(performance.now());
+</script>
+</body>
+</html>
